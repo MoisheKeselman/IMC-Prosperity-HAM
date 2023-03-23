@@ -65,6 +65,10 @@ class Trader:
         coco_order_depth: OrderDepth = state.order_depths[COCONUTS]
 
         pina_orders, coco_orders = self.process_coconuts_and_pinacoladas(pina_order_depth, coco_order_depth)
+        result[PINA_COLADAS] = pina_orders
+        result[COCONUTS] = coco_orders
+
+        print(result)
 
         return result
     
@@ -127,6 +131,8 @@ class Trader:
 
     def process_coconuts_and_pinacoladas(self, pina_od: OrderDepth, coco_od: OrderDepth) -> Tuple[List[Order], List[Order]]:
         '''
+        Very simple pair trading algorithm. Buy the cheaper product, sell the more expensive one.
+
         Parameters:
         pina_od: OrderDepth
             Order depth for Pina Coladas
@@ -137,27 +143,31 @@ class Trader:
         List[Order] for Pina Coladas
         List[Order] for Coconuts
         '''
-        orders: list[Order] = []
+        pina_orders: list[Order] = []
+        coco_orders: list[Order] = []
 
         standardized_pina_price = (max(pina_od.buy_orders.keys()) + min(pina_od.sell_orders.keys())) / 2 / self.PINACOLADA_PRICE
         standardized_coco_price = (max(coco_od.buy_orders.keys()) + min(coco_od.sell_orders.keys())) / 2 / self.COCONUT_PRICE
 
-        print(f'Pina Price: {standardized_pina_price}, Coco Price: {standardized_coco_price}')
+        print(f'Pina Coladas Price: {standardized_pina_price:.4f}, Coco Price: {standardized_coco_price:.4f}, \
+              {"Coconuts cheaper" if standardized_pina_price > standardized_coco_price else "Pina Coladas cheaper"}')
+        
+        trade_factor = 1/30
 
         if standardized_pina_price > standardized_coco_price:
             # short pina, long coco
             if len(pina_od.sell_orders):
-                orders.append(self.sell_highest_bid(PINA_COLADAS, pina_od.sell_orders))
+                pina_orders.append(self.sell_highest_bid(PINA_COLADAS, pina_od.sell_orders))
             if len(coco_od.buy_orders):
-                orders.append(self.buy_lowest_ask(COCONUTS, coco_od.buy_orders))
+                coco_orders.append(self.buy_lowest_ask(COCONUTS, coco_od.buy_orders))
         else:
             # long pina, short coco
             if len(pina_od.buy_orders):
-                orders.append(self.buy_lowest_ask(PINA_COLADAS, pina_od.buy_orders))
+                pina_orders.append(self.buy_lowest_ask(PINA_COLADAS, pina_od.buy_orders))
             if len(coco_od.sell_orders):
-                orders.append(self.sell_highest_bid(COCONUTS, coco_od.sell_orders))
+                coco_orders.append(self.sell_highest_bid(COCONUTS, coco_od.sell_orders))
 
-        return orders
+        return pina_orders, coco_orders
     
     def sell_highest_bid(self, product: str, buy_orders: Dict[int, int], quantity:int = None):
         """
