@@ -1,5 +1,6 @@
-from typing import Dict, List, Tuple
-from datamodel import OrderDepth, TradingState, Order, Trade
+import json
+from typing import Any, Dict, List, Tuple
+from datamodel import OrderDepth, TradingState, Order, Trade, ProsperityEncoder, Symbol
 
 PEARLS = 'PEARLS'
 BANANAS = 'BANANAS'
@@ -10,6 +11,24 @@ MAX_BANANA = 20
 MAX_PEARL = 20
 MAX_COCONUT = 600
 MAX_PINACOLADA = 300
+
+class Logger:
+    def __init__(self) -> None:
+        self.logs = ""
+
+    def print(self, *objects: Any, sep: str = " ", end: str = "\n") -> None:
+        self.logs += sep.join(map(str, objects)) + end
+
+    def flush(self, state: TradingState, orders: dict[Symbol, list[Order]]) -> None:
+        print(json.dumps({
+            "state": state,
+            "orders": orders,
+            "logs": self.logs,
+        }, cls=ProsperityEncoder, separators=(",", ":"), sort_keys=True))
+
+        self.logs = ""
+
+logger = Logger()
 
 class Trader:
     PEARLS_PRICE = 10000
@@ -34,8 +53,8 @@ class Trader:
         """
         # Initialize the method output dict as an empty dict
         result = {}
-        # print(state.own_trades)
-        print(state.position)
+        # logger.print(state.own_trades)
+        logger.print(state.position)
 
         # Iterate over all the keys (the available products) contained in the order depths
         for product in state.order_depths.keys():
@@ -68,7 +87,9 @@ class Trader:
         result[PINA_COLADAS] = pina_orders
         result[COCONUTS] = coco_orders
 
-        print(result)
+        logger.print(result)
+
+        logger.flush(state, orders)
 
         return result
     
@@ -80,7 +101,7 @@ class Trader:
         for ask in sorted(order_depth.sell_orders.keys()):
             best_ask_volume = order_depth.sell_orders[ask]
             if ask < self.PEARLS_PRICE:
-                print("BUY", str(-best_ask_volume) + "x PEARL", ask)
+                logger.print("BUY", str(-best_ask_volume) + "x PEARL", ask)
                 orders.append(Order(PEARLS, ask, -best_ask_volume))
 
         # The below code block is similar to the one above,
@@ -90,7 +111,7 @@ class Trader:
         for bid in sorted(order_depth.buy_orders.keys(), reverse=True):
             best_bid_volume = order_depth.buy_orders[bid]
             if bid > self.PEARLS_PRICE:
-                print("SELL", str(best_bid_volume) + "x PEARL", bid)
+                logger.print("SELL", str(best_bid_volume) + "x PEARL", bid)
                 orders.append(Order(PEARLS, bid, -best_bid_volume))
 
         return orders
@@ -108,7 +129,7 @@ class Trader:
             
             weighted_market_price = total / quantity
 
-            print(f'BANANAS market price: {weighted_market_price}')
+            logger.print(f'BANANAS market price: {weighted_market_price}')
             self.banana_prices.append(weighted_market_price)
         else:
             self.banana_prices.append(self.banana_prices[-1])
@@ -149,7 +170,7 @@ class Trader:
         standardized_pina_price = (max(pina_od.buy_orders.keys()) + min(pina_od.sell_orders.keys())) / 2 / self.PINACOLADA_PRICE
         standardized_coco_price = (max(coco_od.buy_orders.keys()) + min(coco_od.sell_orders.keys())) / 2 / self.COCONUT_PRICE
 
-        print(f'Pina Coladas Price: {standardized_pina_price:.4f}, Coco Price: {standardized_coco_price:.4f}, \
+        logger.print(f'Pina Coladas Price: {standardized_pina_price:.4f}, Coco Price: {standardized_coco_price:.4f}, \
               {"Coconuts cheaper" if standardized_pina_price > standardized_coco_price else "Pina Coladas cheaper"}')
         
         trade_factor = 1/30
@@ -157,15 +178,15 @@ class Trader:
         if standardized_pina_price > standardized_coco_price:
             # short pina, long coco
             if len(pina_od.sell_orders):
-                pina_orders.append(self.sell_highest_bid(PINA_COLADAS, pina_od.sell_orders))
+                pina_orders.append(self.sell_highest_bid(PINA_COLADAS, pina_od.sell_orders, quantity=trade_factor*MAX_PINACOLADA))
             if len(coco_od.buy_orders):
-                coco_orders.append(self.buy_lowest_ask(COCONUTS, coco_od.buy_orders))
+                coco_orders.append(self.buy_lowest_ask(COCONUTS, coco_od.buy_orders, quantity=trade_factor*MAX_COCONUT))
         else:
             # long pina, short coco
             if len(pina_od.buy_orders):
-                pina_orders.append(self.buy_lowest_ask(PINA_COLADAS, pina_od.buy_orders))
+                pina_orders.append(self.buy_lowest_ask(PINA_COLADAS, pina_od.buy_orders, quantity=trade_factor*MAX_PINACOLADA))
             if len(coco_od.sell_orders):
-                coco_orders.append(self.sell_highest_bid(COCONUTS, coco_od.sell_orders))
+                coco_orders.append(self.sell_highest_bid(COCONUTS, coco_od.sell_orders, quantity=trade_factor*MAX_COCONUT))
 
         return pina_orders, coco_orders
     
@@ -184,7 +205,7 @@ class Trader:
         if quantity is None:
             quantity = buy_orders[bid]
 
-        print("SELL", str(quantity) + f"x {product} at ", bid)
+        logger.print("SELL", str(quantity) + f"x {product} at ", bid)
         
         return Order(product, bid, -quantity)
     
@@ -203,7 +224,7 @@ class Trader:
         if quantity is None:
             quantity = -sell_orders[ask] # make it negative because sell orders are negative
 
-        print("BUY", str(quantity) + f"x {product} at ", ask)
+        logger.print("BUY", str(quantity) + f"x {product} at ", ask)
         
         return Order(product, ask, quantity)
 
